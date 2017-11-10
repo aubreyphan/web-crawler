@@ -1,25 +1,19 @@
-// var fs = require('fs');
-var request = require('request');
-var cheerio = require('cheerio');
-var URL = require('url-parse');
+var fs = require('fs')
+, request = require('request')
+, cheerio = require('cheerio')
+, URL = require('url-parse');
 
 var start_url = 'https://accelerateokanagan.com/';
 var url = new URL(start_url);
-var json =  {
-        url: '',
-        assets: []
-};
-var pages = [];
-var attr = [];
 var base_url = url.protocol + '//' + url.hostname;
+
+var json  = []
+, pages   = []
+, attr    = [];
 
 //App starts
 request(start_url, function(error, response, html) {
-    if (error) {
-        console.log("Error:" + error);
-    }
-    console.log('Status code: ' + response.statusCode );
-    if (response.statusCode === 200) {
+    if (!error) {
         //Parse the document body
         var $ = cheerio.load(html);
         //collect links of same domain
@@ -33,36 +27,58 @@ request(start_url, function(error, response, html) {
                 return k == arr.indexOf(item);
             });
         });
-        pages.map(function(val) {
-            json.url = val;
-            console.log(json);
-        })
-        // pages.map(function(val) {
-        //     console.log('On page: ' + val);
-        //     //Getting static assets
-        //     var sub_links = $("img[src^='/']");
-        //     getLinks(sub_links, attr, 'src', $);
-        // });              
+        
+        pages.map(function(page, index) {
+            request(page, function (err, res, body) {
+                if (!error) {
+                    var $ = cheerio.load(body);
+                    var sub_links1 = $("link[href^='/']");
+                    var sub_links2 = $("script[src^='/']");
+                    var sub_links3 = $("img[src^='/']");
+
+                    sub_links1.each(function() {
+                        let href1 = base_url + $(this).attr('href');
+                        //filter duplicates        
+                        attr.push(href1);
+                        attr = attr.filter(function(item, k, arr) {
+                            return k == arr.indexOf(item);
+                        });
+                    });
+                    
+                    sub_links2.each(function() {
+                        let href2 = base_url + $(this).attr('src');
+                        //filter duplicates        
+                        attr.push(href2);
+                        attr = attr.filter(function(item, k, arr) {
+                            return k == arr.indexOf(item);
+                        });
+                    });
+
+                    sub_links3.each(function() {
+                        let href3 = base_url + $(this).attr('src');
+                        //filter duplicates        
+                        attr.push(href3);
+                        attr = attr.filter(function(item, k, arr) {
+                            return k == arr.indexOf(item);
+                        });
+                    });
+
+                    json.push(
+                        {
+                            url: page,
+                            assets: attr
+                        }
+                    );
+                }
+                fs.writeFile('crawler.json', JSON.stringify(json), function(err) {
+                    if (err) throw err;
+                });
+            });
+        });                                          
     }
+    console.log('Successfully written into crawler.json');
 });     
 
 
-// function getLinks(arr1, arr2, n, $) {
-//     arr1.each(function() {
-//         let href = base_url + $(this).attr(n);
-//         //filter duplicates        
-//         arr2.push(href);
-//         arr2 = arr2.filter(function(item, k, arr) {
-//             return k == arr.indexOf(item);
-//         });
-//     });
-//     console.log(arr2);
-    
-//     add static assets to json.assets
-//     arr2.map(function(val) {
-//         console.log('On page: ' + val);
-//         //Getting static assets
-//         var sub_links = $("img[src^='/']");
-//         getLinks(sub_links, attr, 'src', $);
-//     });
-// }
+
+

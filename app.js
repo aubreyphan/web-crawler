@@ -11,6 +11,18 @@ var json  = []
 , pages   = []
 , attr    = [];
 
+//Read website from input.txt
+function readFile(callback) {
+    fs.readFile('input.txt', 'utf-8', function(err, data) {
+        if (err) throw err;
+        callback(null, data);
+    });
+}
+readFile(function(err, data) {
+    start_url = data;
+    console.log('Crawling website: ' + start_url);
+})
+
 //App starts
 request(start_url, function(error, response, html) {
     if (!error) {
@@ -70,13 +82,13 @@ request(start_url, function(error, response, html) {
                         }
                     );
                 }
-                fs.writeFile('crawler.json', JSON.stringify(json), function(err) {
+                fs.writeFile('output.json', JSON.stringify(json, null, 4), function(err) {
                     if (err) throw err;
                 });
             });
         });                                          
     }
-    console.log('Successfully written into crawler.json');
+    console.log('Successfully written into output.json');
 });     
 
 

@@ -2,95 +2,76 @@ var fs = require('fs')
 , request = require('request')
 , cheerio = require('cheerio')
 , URL = require('url-parse');
-
-var start_url = 'https://accelerateokanagan.com/';
+//Input URL to crawl in var start_url
+var start_url = 'https://www.accelerateokanagan.com/'; 
 var url = new URL(start_url);
 var base_url = url.protocol + '//' + url.hostname;
 
-var json  = []
-, pages   = []
-, attr    = [];
+var json  = []; //final obj to print into output.json
+var pagesVisited = {} //used to avoid link duplicates 
+,   pagesToVisit = [] //before filtering link duplicates
+,   assets = [];
 
-//Read website from input.txt
-function readFile(callback) {
-    fs.readFile('input.txt', 'utf-8', function(err, data) {
-        if (err) throw err;
-        callback(null, data);
+pagesToVisit.push(start_url);
+crawl();
+console.log('Crawling website: ' + start_url);
+console.log('Written into output.json');
+
+function crawl() {
+    var nextPage = pagesToVisit.shift(); 
+    if (nextPage in pagesVisited) {
+        crawl();
+    } else {
+        visitPage(nextPage, crawl);
+    }
+}
+
+function visitPage(url, callback) {
+    pagesVisited[url] = true;
+    request(url, function(error, response, html) {
+        if (!error) {
+            //Parse the document body
+            var $ = cheerio.load(html);
+            collectLinks($);
+            json.push(
+                {
+                    url: url,
+                    assets: assets
+                }
+            );
+            //Write obj json to output.json
+            fs.writeFile('output.json', JSON.stringify(json, null, 4), function(err) {
+                if (err) throw err;
+            });
+            //clear assets of previous page
+            assets = [];
+            callback();
+        }
     });
 }
-readFile(function(err, data) {
-    start_url = data;
-    console.log('Crawling website: ' + start_url);
-})
 
-//App starts
-request(start_url, function(error, response, html) {
-    if (!error) {
-        //Parse the document body
-        var $ = cheerio.load(html);
-        //collect links of same domain
-        var links = $("a[href^='/']");
-        //add links to json.url
-        links.each(function() {
-            let href = base_url + $(this).attr('href');
-            //filter duplicates        
-            pages.push(href);
-            pages = pages.filter(function(item, k, arr) {
-                return k == arr.indexOf(item);
-            });
+function collectLinks($) {
+    //collect links of the same domain
+    var links = $("a[href^='/']");
+    links.each(function() {
+        pagesToVisit.push(base_url + $(this).attr('href'));
+    });
+    //Get static assets of that link
+    var sub_links = [];
+    sub_links[0] = $("script[src^='/']");
+    sub_links[1] = $("img[src^='/']");
+    sub_links[2] = $("link[rel^='stylesheet']");
+
+    for(var i=0; i<sub_links.length-1; i++) {
+        sub_links[i].each(function(){
+            assets.push(base_url + $(this).attr('src'));
         });
-        
-        pages.map(function(page, index) {
-            request(page, function (err, res, body) {
-                if (!error) {
-                    var $ = cheerio.load(body);
-                    var sub_links1 = $("link[href^='/']");
-                    var sub_links2 = $("script[src^='/']");
-                    var sub_links3 = $("img[src^='/']");
-
-                    sub_links1.each(function() {
-                        let href1 = base_url + $(this).attr('href');
-                        //filter duplicates        
-                        attr.push(href1);
-                        attr = attr.filter(function(item, k, arr) {
-                            return k == arr.indexOf(item);
-                        });
-                    });
-                    
-                    sub_links2.each(function() {
-                        let href2 = base_url + $(this).attr('src');
-                        //filter duplicates        
-                        attr.push(href2);
-                        attr = attr.filter(function(item, k, arr) {
-                            return k == arr.indexOf(item);
-                        });
-                    });
-
-                    sub_links3.each(function() {
-                        let href3 = base_url + $(this).attr('src');
-                        //filter duplicates        
-                        attr.push(href3);
-                        attr = attr.filter(function(item, k, arr) {
-                            return k == arr.indexOf(item);
-                        });
-                    });
-
-                    json.push(
-                        {
-                            url: page,
-                            assets: attr
-                        }
-                    );
-                }
-                fs.writeFile('output.json', JSON.stringify(json, null, 4), function(err) {
-                    if (err) throw err;
-                });
-            });
-        });                                          
     }
-    console.log('Successfully written into output.json');
-});     
-
-
-
-
+    sub_links[2].each(function(){
+        assets.push(base_url + $(this).attr('href'));
+    });
+    //filter duplicated assets
+    assets = assets.filter(function(item, k, arr) {
+        return k == arr.indexOf(item);
+    });
+}
